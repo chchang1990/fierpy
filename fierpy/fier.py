@@ -272,6 +272,54 @@ def find_fits(reof_ds: xr.Dataset, q_df: xr.DataArray, stack: xr.DataArray, trai
     return fit_dict
 
 
+def find_fits_nosplit(reof_ds: xr.Dataset, q_df: xr.DataArray, stack: xr.DataArray):
+    """Function to fit multiple polynomial curves on different temporal modes
+
+    """        
+    
+    X = q_df
+    y = reof_ds.temporal_modes
+   
+    logger.debug(X)
+
+    modes = reof_ds.mode.values
+
+    fit_dict = dict()
+    dict_keys = ['fit_r2','pred_prr','pred_spr']
+
+    for mode in modes:
+
+        y_mode = y.sel(mode=mode)
+
+        for order in range(1,4):
+
+            # apply polynomial fitting
+            c = np.polyfit(X,y_mode,deg=order)
+            f = np.poly1d(c)
+
+            y_pred = f(X)
+
+
+
+            # calculate statistics
+            # calculate the stats of fitting on a test subsample
+            temporal_r2 = metrics.r2_score(y_mode, y_pred)
+            temporal_prr = stats.pearsonr(y_mode, y_pred) # Pearson's correlation (linear correlation)
+            temporal_spr = stats.spearmanr(y_mode, y_pred) # Spearman's correlation (monotonic correlation)
+            
+            # pack the resulting statistics in dictionary for the loop
+            stat = [temporal_r2, temporal_prr[0], temporal_spr[0]]
+            
+            
+            loop_dict = {f"mode{mode}_order{order}_{k}":stat[i] for i,k in enumerate(dict_keys)}
+            loop_dict[f"mode{mode}_order{order}_coeffs"] = c
+            logging.debug(loop_dict)
+            # merge the loop dictionary with the larger one
+            fit_dict = {**fit_dict,**loop_dict}
+
+    return fit_dict
+
+
 def sel_best_fit(fit_dict: dict, metric: str = "r",ranking: str = "max") -> tuple:
     """Function to extract out the best fit based on user defined metric and ranking
 
